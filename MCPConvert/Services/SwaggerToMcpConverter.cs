@@ -53,11 +53,147 @@ namespace MCPConvert.Services
 
                 // Fetch the Swagger document
                 HttpResponseMessage response;
+                string actualSwaggerUrl = swaggerUrl;
                 try
                 {
                     if (diagnosticMode && diagnostics != null) diagnostics.ProcessingSteps.Add("Fetching Swagger document");
                     var httpClient = _httpClientFactory.CreateClient();
-                    response = await httpClient.GetAsync(swaggerUrl);
+                    
+                    // First check if this is a Swagger UI URL (index.html)
+                    if (swaggerUrl.Contains("index.html") || swaggerUrl.EndsWith("/swagger") || swaggerUrl.EndsWith("/swagger/"))
+                    {
+                        if (diagnosticMode && diagnostics != null) diagnostics.ProcessingSteps.Add("Detected Swagger UI URL, attempting to find JSON endpoint");
+                        
+                        // Try to get the Swagger UI page
+                        var uiResponse = await httpClient.GetAsync(swaggerUrl);
+                        uiResponse.EnsureSuccessStatusCode();
+                        var htmlContent = await uiResponse.Content.ReadAsStringAsync();
+                        
+                        // Try to extract the Swagger JSON URL
+                        // Look for the url: pattern in the Swagger UI JavaScript
+                        var urlMatch = Regex.Match(htmlContent, @"url:\s*[""'](.+?)[""']");
+                        if (urlMatch.Success)
+                        {
+                            var jsonPath = urlMatch.Groups[1].Value;
+                            
+                            // If it's a relative URL, combine with the base URL
+                            if (jsonPath.StartsWith("/"))
+                            {
+                                var uri = new Uri(swaggerUrl);
+                                var baseUrl = $"{uri.Scheme}://{uri.Authority}";
+                                actualSwaggerUrl = baseUrl + jsonPath;
+                            }
+                            else if (!jsonPath.StartsWith("http"))
+                            {
+                                // Handle relative path without leading slash
+                                var uri = new Uri(swaggerUrl);
+                                var baseUrl = $"{uri.Scheme}://{uri.Authority}{uri.AbsolutePath}";
+                                // Remove the index.html or trailing slash if present
+                                baseUrl = Regex.Replace(baseUrl, @"(index\.html|/+)$", "");
+                                actualSwaggerUrl = baseUrl + "/" + jsonPath;
+                            }
+                            else
+                            {
+                                actualSwaggerUrl = jsonPath;
+                            }
+                            
+                            if (diagnosticMode && diagnostics != null)
+                            {
+                                diagnostics.ProcessingSteps.Add($"Found Swagger JSON URL: {actualSwaggerUrl}");
+                            }
+                        }
+                        else
+                        {
+                            // Try another common pattern: configUrl
+                            urlMatch = Regex.Match(htmlContent, @"configUrl:\s*[""'](.+?)[""']");
+                            if (urlMatch.Success)
+                            {
+                                var jsonPath = urlMatch.Groups[1].Value;
+                                
+                                // Handle relative or absolute URL as above
+                                if (jsonPath.StartsWith("/"))
+                                {
+                                    var uri = new Uri(swaggerUrl);
+                                    var baseUrl = $"{uri.Scheme}://{uri.Authority}";
+                                    actualSwaggerUrl = baseUrl + jsonPath;
+                                }
+                                else if (!jsonPath.StartsWith("http"))
+                                {
+                                    var uri = new Uri(swaggerUrl);
+                                    var baseUrl = $"{uri.Scheme}://{uri.Authority}{uri.AbsolutePath}";
+                                    baseUrl = Regex.Replace(baseUrl, @"(index\.html|/+)$", "");
+                                    actualSwaggerUrl = baseUrl + "/" + jsonPath;
+                                }
+                                else
+                                {
+                                    actualSwaggerUrl = jsonPath;
+                                }
+                                
+                                if (diagnosticMode && diagnostics != null)
+                                {
+                                    diagnostics.ProcessingSteps.Add($"Found Swagger JSON URL from configUrl: {actualSwaggerUrl}");
+                                }
+                            }
+                            else
+                            {
+                                // If we can't find the URL in the HTML, try some common endpoints
+                                var uri = new Uri(swaggerUrl);
+                                var baseUrl = $"{uri.Scheme}://{uri.Authority}";
+                                var pathParts = uri.AbsolutePath.Split('/');
+                                var apiVersion = "v1";
+                                
+                                // Try to extract API version from the path
+                                foreach (var part in pathParts)
+                                {
+                                    if (part.StartsWith("v") && part.Length > 1 && char.IsDigit(part[1]))
+                                    {
+                                        apiVersion = part;
+                                        break;
+                                    }
+                                }
+                                
+                                // Try common Swagger JSON endpoints
+                                var commonEndpoints = new[]
+                                {
+                                    $"{baseUrl}/swagger/{apiVersion}/swagger.json",
+                                    $"{baseUrl}/swagger/v1/swagger.json",
+                                    $"{baseUrl}/api-docs",
+                                    $"{baseUrl}/swagger/swagger.json",
+                                    $"{baseUrl}/openapi.json"
+                                };
+                                
+                                if (diagnosticMode && diagnostics != null)
+                                {
+                                    diagnostics.ProcessingSteps.Add("Could not find Swagger JSON URL in HTML, trying common endpoints");
+                                }
+                                
+                                foreach (var endpoint in commonEndpoints)
+                                {
+                                    try
+                                    {
+                                        var testResponse = await httpClient.GetAsync(endpoint);
+                                        if (testResponse.IsSuccessStatusCode)
+                                        {
+                                            actualSwaggerUrl = endpoint;
+                                            if (diagnosticMode && diagnostics != null)
+                                            {
+                                                diagnostics.ProcessingSteps.Add($"Found working Swagger JSON endpoint: {actualSwaggerUrl}");
+                                            }
+                                            break;
+                                        }
+                                    }
+                                    catch
+                                    {
+                                        // Continue trying other endpoints
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Now fetch the actual Swagger JSON
+                    if (diagnosticMode && diagnostics != null) diagnostics.ProcessingSteps.Add($"Fetching Swagger JSON from: {actualSwaggerUrl}");
+                    response = await httpClient.GetAsync(actualSwaggerUrl);
                     response.EnsureSuccessStatusCode();
 
                     if (diagnosticMode && diagnostics != null)

@@ -5,6 +5,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddRazorPages();
+builder.Services.AddControllers();
 builder.Services.AddHttpClient();
 
 // Register MCPConvert services
@@ -47,5 +48,6 @@ app.UseMcpBuckle();
 
 app.UseStaticFiles();
 app.MapRazorPages();
+app.MapControllers();
 
 app.Run();

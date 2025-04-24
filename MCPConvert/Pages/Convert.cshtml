@@ -34,7 +34,14 @@
                         
                         <div class="mb-3">
                             <label asp-for="Request.SwaggerFile" class="form-label">Upload Swagger File</label>
-                            <input asp-for="Request.SwaggerFile" class="form-control" type="file" accept=".json,.yaml,.yml" />
+                            <div id="drop-area" class="p-3 border rounded mb-2" style="border-style: dashed !important;">
+                                <div class="text-center mb-2" id="drop-text">Drag & drop your Swagger file here</div>
+                                <div id="file-preview" class="d-none alert alert-success mb-2">
+                                    <i class="bi bi-file-earmark-text"></i> <span id="file-name"></span>
+                                    <button type="button" class="btn-close float-end" id="remove-file"></button>
+                                </div>
+                                <input asp-for="Request.SwaggerFile" class="form-control" type="file" accept=".json,.yaml,.yml" id="file-input" />
+                            </div>
                             <div class="form-text">Upload a Swagger/OpenAPI JSON or YAML file</div>
                         </div>
                         
@@ -215,12 +222,98 @@
 
 @section Scripts {
     <script>
-        // Add client-side validation if needed
         document.addEventListener('DOMContentLoaded', function() {
             // Highlight code blocks
             document.querySelectorAll('pre code').forEach((block) => {
                 // If you want syntax highlighting, you could add a library like highlight.js here
             });
+            
+            // Drag and drop functionality
+            const dropArea = document.getElementById('drop-area');
+            const fileInput = document.getElementById('file-input');
+            
+            // Prevent default drag behaviors
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropArea.addEventListener(eventName, preventDefaults, false);
+                document.body.addEventListener(eventName, preventDefaults, false);
+            });
+            
+            // Highlight drop area when item is dragged over it
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropArea.addEventListener(eventName, highlight, false);
+            });
+            
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropArea.addEventListener(eventName, unhighlight, false);
+            });
+            
+            // Handle dropped files
+            dropArea.addEventListener('drop', handleDrop, false);
+            
+            // Handle file selection via the input
+            fileInput.addEventListener('change', handleFileSelect, false);
+            
+            // Handle file removal
+            const removeFileBtn = document.getElementById('remove-file');
+            if (removeFileBtn) {
+                removeFileBtn.addEventListener('click', removeFile, false);
+            }
+            
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            function highlight() {
+                dropArea.classList.add('bg-light');
+            }
+            
+            function unhighlight() {
+                dropArea.classList.remove('bg-light');
+            }
+            
+            function handleDrop(e) {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                
+                if (files.length > 0) {
+                    fileInput.files = files;
+                    showFilePreview(files[0]);
+                }
+            }
+            
+            function handleFileSelect(e) {
+                const files = e.target.files;
+                if (files.length > 0) {
+                    showFilePreview(files[0]);
+                } else {
+                    hideFilePreview();
+                }
+            }
+            
+            function showFilePreview(file) {
+                const filePreview = document.getElementById('file-preview');
+                const fileName = document.getElementById('file-name');
+                const dropText = document.getElementById('drop-text');
+                
+                fileName.textContent = file.name;
+                filePreview.classList.remove('d-none');
+                dropText.classList.add('d-none');
+            }
+            
+            function hideFilePreview() {
+                const filePreview = document.getElementById('file-preview');
+                const dropText = document.getElementById('drop-text');
+                
+                filePreview.classList.add('d-none');
+                dropText.classList.remove('d-none');
+            }
+            
+            function removeFile(e) {
+                e.stopPropagation();
+                fileInput.value = '';
+                hideFilePreview();
+            }
         });
     </script>
 }

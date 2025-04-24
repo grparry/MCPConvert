@@ -19,19 +19,19 @@ jobs:
         
     - name: Restore dependencies
       run: dotnet restore
-      working-directory: MCPConvert
+      working-directory: MCPConvert/MCPConvert
       
     - name: Build
       run: dotnet build --configuration Release --no-restore
-      working-directory: MCPConvert
+      working-directory: MCPConvert/MCPConvert
       
     - name: Publish
       run: dotnet publish --configuration Release --no-build --output ./publish
-      working-directory: MCPConvert
+      working-directory: MCPConvert/MCPConvert
       
     - name: Deploy to Azure Web App
       uses: azure/webapps-deploy@v2
       with:
         app-name: 'mcpconvert'  # Azure Web App name (must match the msdeploySite in publish profile)
         publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-        package: MCPConvert/publish
+        package: MCPConvert/MCPConvert/publish

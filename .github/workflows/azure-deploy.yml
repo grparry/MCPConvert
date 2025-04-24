@@ -1,0 +1,37 @@
+name: Deploy to Azure
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '9.0.x'
+        
+    - name: Restore dependencies
+      run: dotnet restore
+      working-directory: MCPConvert
+      
+    - name: Build
+      run: dotnet build --configuration Release --no-restore
+      working-directory: MCPConvert
+      
+    - name: Publish
+      run: dotnet publish --configuration Release --no-build --output ./publish
+      working-directory: MCPConvert
+      
+    - name: Deploy to Azure Web App
+      uses: azure/webapps-deploy@v2
+      with:
+        app-name: 'mcpconvert-h3bwarf4e3e7aabv'  # Azure Web App name
+        publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+        package: MCPConvert/publish

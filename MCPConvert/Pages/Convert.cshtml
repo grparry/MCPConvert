@@ -1,0 +1,226 @@
+@page
+@model MCPConvert.Pages.ConvertModel
+@{
+    ViewData["Title"] = "Convert Swagger to MCP";
+}
+
+<div class="container">
+    <h1 class="mb-4">Convert Swagger to MCP</h1>
+    
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Input</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" enctype="multipart/form-data">
+                        @if (!string.IsNullOrEmpty(Model.ValidationError))
+                        {
+                            <div class="alert alert-danger" role="alert">
+                                @Model.ValidationError
+                            </div>
+                        }
+                        
+                        <div class="mb-3">
+                            <label asp-for="Request.SwaggerUrl" class="form-label">Swagger URL</label>
+                            <input asp-for="Request.SwaggerUrl" class="form-control" placeholder="https://example.com/swagger.json" />
+                            <div class="form-text">Enter a URL to a Swagger/OpenAPI JSON or YAML file</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">OR</label>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label asp-for="Request.SwaggerFile" class="form-label">Upload Swagger File</label>
+                            <input asp-for="Request.SwaggerFile" class="form-control" type="file" accept=".json,.yaml,.yml" />
+                            <div class="form-text">Upload a Swagger/OpenAPI JSON or YAML file</div>
+                        </div>
+                        
+                        <div class="mb-3 form-check">
+                            <input asp-for="Request.IncludeSourceMapping" class="form-check-input" />
+                            <label asp-for="Request.IncludeSourceMapping" class="form-check-label">Include Source Mapping</label>
+                            <div class="form-text">Include mapping between MCP elements and Swagger source</div>
+                        </div>
+                        
+                        <div class="mb-3 form-check">
+                            <input asp-for="Request.DiagnosticMode" class="form-check-input" />
+                            <label asp-for="Request.DiagnosticMode" class="form-check-label">Diagnostic Mode</label>
+                            <div class="form-text">Include detailed diagnostic information in the output</div>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary">Convert</button>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Usage Statistics</h5>
+                </div>
+                <div class="card-body">
+                    @if (Model.UsageStats != null)
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Daily Usage</label>
+                            <div class="progress">
+                                <div class="progress-bar" role="progressbar" style="width: @Model.UsageStats.DailyQuotaPercentage%;" 
+                                     aria-valuenow="@Model.UsageStats.DailyQuotaPercentage" aria-valuemin="0" aria-valuemax="100">
+                                    @Model.UsageStats.DailyQuotaPercentage.ToString("0.0")%
+                                </div>
+                            </div>
+                            <div class="form-text">
+                                @Model.UsageStats.DailyConversions of @Model.UsageStats.DailyQuotaLimit conversions used today
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Total Conversions</label>
+                            <p>@Model.UsageStats.TotalConversions</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <p>No usage statistics available</p>
+                    }
+                </div>
+            </div>
+            
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Sample Swagger Files</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group">
+                        <li class="list-group-item">
+                            <a href="https://petstore.swagger.io/v2/swagger.json" target="_blank">Petstore API (v2)</a>
+                        </li>
+                        <li class="list-group-item">
+                            <a href="https://petstore3.swagger.io/api/v3/openapi.json" target="_blank">Petstore API (v3)</a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            @if (Model.ShowResults && Model.Response != null)
+            {
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Result</h5>
+                        @if (Model.Response.Success)
+                        {
+                            <form method="post" asp-page-handler="Download">
+                                <input type="hidden" name="mcpJson" value="@Model.Response.McpJson" />
+                                <button type="submit" class="btn btn-sm btn-outline-primary">Download</button>
+                            </form>
+                        }
+                    </div>
+                    <div class="card-body">
+                        @if (Model.Response.Success)
+                        {
+                            <div class="mb-3">
+                                <label class="form-label">MCP JSON</label>
+                                <pre class="bg-light p-3 rounded"><code>@Model.Response.McpJson</code></pre>
+                            </div>
+                            
+                            @if (Model.Response.SourceMap != null && Model.Response.SourceMap.Count > 0)
+                            {
+                                <div class="mb-3">
+                                    <label class="form-label">Source Mapping</label>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th>MCP Path</th>
+                                                    <th>Swagger Path</th>
+                                                    <th>Line</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var entry in Model.Response.SourceMap)
+                                                {
+                                                    <tr>
+                                                        <td>@entry.Key</td>
+                                                        <td>@entry.Value.SwaggerPath</td>
+                                                        <td>@entry.Value.LineNumber</td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            }
+                            
+                            @if (Model.Response.Diagnostics != null)
+                            {
+                                <div class="mb-3">
+                                    <label class="form-label">Diagnostics</label>
+                                    
+                                    @if (Model.Response.Diagnostics.Warnings.Count > 0)
+                                    {
+                                        <div class="mb-3">
+                                            <h6>Warnings</h6>
+                                            <ul class="list-group">
+                                                @foreach (var warning in Model.Response.Diagnostics.Warnings)
+                                                {
+                                                    <li class="list-group-item list-group-item-warning">@warning</li>
+                                                }
+                                            </ul>
+                                        </div>
+                                    }
+                                    
+                                    @if (Model.Response.Diagnostics.ProcessingSteps.Count > 0)
+                                    {
+                                        <div class="mb-3">
+                                            <h6>Processing Steps</h6>
+                                            <ul class="list-group">
+                                                @foreach (var step in Model.Response.Diagnostics.ProcessingSteps)
+                                                {
+                                                    <li class="list-group-item">@step</li>
+                                                }
+                                            </ul>
+                                        </div>
+                                    }
+                                    
+                                    @if (Model.Response.Diagnostics.PerformanceMetrics.Count > 0)
+                                    {
+                                        <div class="mb-3">
+                                            <h6>Performance Metrics</h6>
+                                            <ul class="list-group">
+                                                @foreach (var metric in Model.Response.Diagnostics.PerformanceMetrics)
+                                                {
+                                                    <li class="list-group-item">@metric.Key: @metric.Value ms</li>
+                                                }
+                                            </ul>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="alert alert-danger" role="alert">
+                                @Model.Response.ErrorMessage
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Add client-side validation if needed
+        document.addEventListener('DOMContentLoaded', function() {
+            // Highlight code blocks
+            document.querySelectorAll('pre code').forEach((block) => {
+                // If you want syntax highlighting, you could add a library like highlight.js here
+            });
+        });
+    </script>
+}

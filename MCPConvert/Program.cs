@@ -9,7 +9,7 @@ builder.Services.AddControllers();
 builder.Services.AddHttpClient();
 
 // Register MCPConvert services
-builder.Services.AddSingleton<ISwaggerToMcpConverter, SwaggerToMcpConverter>();
+builder.Services.AddSwaggerConversionServices();
 builder.Services.AddSingleton<ConversionCacheService>();
 builder.Services.AddSingleton<UsageTrackingService>();
 

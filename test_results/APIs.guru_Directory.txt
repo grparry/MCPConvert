@@ -1,0 +1,7 @@
+ENDPOINT: APIs.guru Directory - https://api.apis.guru/v2/list.json
+----------------------------------------
+RESPONSE:
+
+
+Raw response size:        0 bytes
+❌ FAILED

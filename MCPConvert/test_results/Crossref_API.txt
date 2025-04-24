@@ -1,0 +1,15 @@
+ENDPOINT: Crossref API - https://api.crossref.org/swagger-ui/index.html
+----------------------------------------
+RESPONSE:
+{"success":false,"errorMessage":"Failed to parse Swagger document","mcpJson":null,"contentHash":null,"sourceMap":null,"diagnostics":{"warnings":["Parse exception: OpenApiUnsupportedSpecVersionException"],"processingSteps":["Starting conversion from URL: https://api.crossref.org/swagger-ui/index.html","Detected Swagger UI URL, attempting to find JSON endpoint","Could not find Swagger JSON URL in HTML, trying common endpoints","Trying common Swagger/OpenAPI endpoints","Fetching Swagger JSON from: https://api.crossref.org/swagger-ui/index.html","Swagger document fetched successfully (734 bytes)","Error parsing Swagger document: OpenAPI specification version '<!-- HTML for static distribution bundle build --> <!DOCTYPE html> <html lang=\"en\"> <head> <meta charset=\"UTF-8\"> <title>Swagger UI</title> <link rel=\"stylesheet\" type=\"text/css\" href=\"./swagger-ui.css\" /> <link rel=\"stylesheet\" type=\"text/css\" href=\"index.css\" /> <link rel=\"icon\" type=\"image/png\" href=\"./favicon-32x32.png\" sizes=\"32x32\" /> <link rel=\"icon\" type=\"image/png\" href=\"./favicon-16x16.png\" sizes=\"16x16\" /> </head>\n<body> <div id=\"swagger-ui\"></div> <script src=\"./swagger-ui-bundle.js\" charset=\"UTF-8\"> </script> <script src=\"./swagger-ui-standalone-preset.js\" charset=\"UTF-8\"> </script> <script src=\"./swagger-initializer.js\" charset=\"UTF-8\"> </script> </body> </html>' is not supported."],"performanceMetrics":{"FetchTime":8944.371}},"timestamp":"2025-04-24T17:19:49.445996Z"}
+
+❌ FAILED
+Error: Failed to parse Swagger document
+Diagnostic steps:
+Starting conversion from URL: https://api.crossref.org/swagger-ui/index.html
+Detected Swagger UI URL, attempting to find JSON endpoint
+Could not find Swagger JSON URL in HTML, trying common endpoints
+Trying common Swagger/OpenAPI endpoints
+Fetching Swagger JSON from: https://api.crossref.org/swagger-ui/index.html
+Swagger document fetched successfully (734 bytes)
+Error parsing Swagger document: OpenAPI specification version '<!-- HTML for static distribution bundle build --> <!DOCTYPE html> <html lang=\en\> <head> <meta charset=\UTF-8\> <title>Swagger UI</title> <link rel=\stylesheet\ type=\text/css\ href=\./swagger-ui.css\ /> <link rel=\stylesheet\ type=\text/css\ href=\index.css\ /> <link rel=\icon\ type=\image/png\ href=\./favicon-32x32.png\ sizes=\32x32\ /> <link rel=\icon\ type=\image/png\ href=\./favicon-16x16.png\ sizes=\16x16\ /> </head>\n<body> <div id=\swagger-ui\></div> <script src=\./swagger-ui-bundle.js\ charset=\UTF-8\> </script> <script src=\./swagger-ui-standalone-preset.js\ charset=\UTF-8\> </script> <script src=\./swagger-initializer.js\ charset=\UTF-8\> </script> </body> </html>' is not supported.

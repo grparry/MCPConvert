@@ -1,0 +1,7 @@
+ENDPOINT: ConfigCat API - https://api.configcat.com/swagger/index.html
+----------------------------------------
+RESPONSE:
+
+
+Raw response size:        0 bytes
+❌ FAILED

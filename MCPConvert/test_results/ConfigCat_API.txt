@@ -1,0 +1,15 @@
+ENDPOINT: ConfigCat API - https://api.configcat.com/swagger/index.html
+----------------------------------------
+RESPONSE:
+{"success":false,"errorMessage":"Failed to parse Swagger document","mcpJson":null,"contentHash":null,"sourceMap":null,"diagnostics":{"warnings":["Parse exception: OpenApiUnsupportedSpecVersionException"],"processingSteps":["Starting conversion from URL: https://api.configcat.com/swagger/index.html","Detected Swagger UI URL, attempting to find JSON endpoint","Could not find Swagger JSON URL in HTML, trying common endpoints","Trying common Swagger/OpenAPI endpoints","Fetching Swagger JSON from: https://api.configcat.com/swagger/index.html","Swagger document fetched successfully (891 bytes)","Error parsing Swagger document: OpenAPI specification version '<!-- HTML for static distribution bundle build --> <!DOCTYPE html> <html lang=\"en\"> <head> <meta charset=\"UTF-8\"> <title>ConfigCat Public Management API</title> <link rel=\"stylesheet\" type=\"text/css\" href=\"./swagger-ui.css\"> <link rel=\"stylesheet\" type=\"text/css\" href=\"./index.css\"> <link rel=\"icon\" type=\"image/png\" href=\"./favicon-32x32.png\" sizes=\"32x32\" /> <link rel=\"icon\" type=\"image/png\" href=\"./favicon-16x16.png\" sizes=\"16x16\" /> <script src='/swagger-ui/custom.js' type='text/javascript'></script> <link href='/swagger-ui/custom.css' rel='stylesheet' media='screen' type='text/css' />\n</head>\n<body> <div id=\"swagger-ui\"></div>\n<script src=\"./swagger-ui-bundle.js\" charset=\"utf-8\"></script> <script src=\"./swagger-ui-standalone-preset.js\" charset=\"utf-8\"></script> <script src=\"index.js\" charset=\"utf-8\"></script> </body> </html>' is not supported."],"performanceMetrics":{"FetchTime":5337.67}},"timestamp":"2025-04-24T17:19:54.81937Z"}
+
+❌ FAILED
+Error: Failed to parse Swagger document
+Diagnostic steps:
+Starting conversion from URL: https://api.configcat.com/swagger/index.html
+Detected Swagger UI URL, attempting to find JSON endpoint
+Could not find Swagger JSON URL in HTML, trying common endpoints
+Trying common Swagger/OpenAPI endpoints
+Fetching Swagger JSON from: https://api.configcat.com/swagger/index.html
+Swagger document fetched successfully (891 bytes)
+Error parsing Swagger document: OpenAPI specification version '<!-- HTML for static distribution bundle build --> <!DOCTYPE html> <html lang=\en\> <head> <meta charset=\UTF-8\> <title>ConfigCat Public Management API</title> <link rel=\stylesheet\ type=\text/css\ href=\./swagger-ui.css\> <link rel=\stylesheet\ type=\text/css\ href=\./index.css\> <link rel=\icon\ type=\image/png\ href=\./favicon-32x32.png\ sizes=\32x32\ /> <link rel=\icon\ type=\image/png\ href=\./favicon-16x16.png\ sizes=\16x16\ /> <script src='/swagger-ui/custom.js' type='text/javascript'></script> <link href='/swagger-ui/custom.css' rel='stylesheet' media='screen' type='text/css' />\n</head>\n<body> <div id=\swagger-ui\></div>\n<script src=\./swagger-ui-bundle.js\ charset=\utf-8\></script> <script src=\./swagger-ui-standalone-preset.js\ charset=\utf-8\></script> <script src=\index.js\ charset=\utf-8\></script> </body> </html>' is not supported.

@@ -1,0 +1,7 @@
+ENDPOINT: Swagger Petstore UI - https://petstore.swagger.io/
+----------------------------------------
+RESPONSE:
+
+
+Raw response size:        0 bytes
+❌ FAILED

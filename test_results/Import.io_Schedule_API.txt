@@ -1,0 +1,7 @@
+ENDPOINT: Import.io Schedule API - https://api.docs.import.io/schedule/swagger.json
+----------------------------------------
+RESPONSE:
+
+
+Raw response size:        0 bytes
+❌ FAILED

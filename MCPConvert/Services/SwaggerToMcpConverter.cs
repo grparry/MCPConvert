@@ -6,14 +6,14 @@ using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi.Models;
 using Microsoft.OpenApi.Readers;
 using MCPConvert.Models;
+using MCPConvert.Services.Conversion;
+using MCPConvert.Services.UrlDetection;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace MCPConvert.Services
 {
@@ -24,16 +24,26 @@ namespace MCPConvert.Services
     {
         private readonly ILogger<SwaggerToMcpConverter> _logger;
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IEnumerable<ISwaggerUrlDetector> _urlDetectors;
+        private readonly OpenApiToMcpConverter _openApiConverter;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SwaggerToMcpConverter"/> class
         /// </summary>
         /// <param name="logger">Logger</param>
         /// <param name="httpClientFactory">HTTP client factory</param>
-        public SwaggerToMcpConverter(ILogger<SwaggerToMcpConverter> logger, IHttpClientFactory httpClientFactory)
+        /// <param name="urlDetectors">Collection of URL detectors</param>
+        /// <param name="openApiConverter">OpenAPI to MCP converter</param>
+        public SwaggerToMcpConverter(
+            ILogger<SwaggerToMcpConverter> logger, 
+            IHttpClientFactory httpClientFactory,
+            IEnumerable<ISwaggerUrlDetector> urlDetectors,
+            OpenApiToMcpConverter openApiConverter)
         {
             _logger = logger;
             _httpClientFactory = httpClientFactory;
+            _urlDetectors = urlDetectors;
+            _openApiConverter = openApiConverter;
         }
 
         /// <inheritdoc />
@@ -51,148 +61,17 @@ namespace MCPConvert.Services
                     diagnostics.ProcessingSteps.Add($"Starting conversion from URL: {swaggerUrl}");
                 }
 
+                // Detect the actual Swagger/OpenAPI JSON URL
+                string actualSwaggerUrl = await DetectSwaggerJsonUrlAsync(swaggerUrl, diagnosticMode, diagnostics);
+                
                 // Fetch the Swagger document
                 HttpResponseMessage response;
-                string actualSwaggerUrl = swaggerUrl;
                 try
                 {
-                    if (diagnosticMode && diagnostics != null) diagnostics.ProcessingSteps.Add("Fetching Swagger document");
+                    if (diagnosticMode && diagnostics != null) 
+                        diagnostics.ProcessingSteps.Add($"Fetching Swagger JSON from: {actualSwaggerUrl}");
+                    
                     var httpClient = _httpClientFactory.CreateClient();
-                    
-                    // First check if this is a Swagger UI URL (index.html)
-                    if (swaggerUrl.Contains("index.html") || swaggerUrl.EndsWith("/swagger") || swaggerUrl.EndsWith("/swagger/"))
-                    {
-                        if (diagnosticMode && diagnostics != null) diagnostics.ProcessingSteps.Add("Detected Swagger UI URL, attempting to find JSON endpoint");
-                        
-                        // Try to get the Swagger UI page
-                        var uiResponse = await httpClient.GetAsync(swaggerUrl);
-                        uiResponse.EnsureSuccessStatusCode();
-                        var htmlContent = await uiResponse.Content.ReadAsStringAsync();
-                        
-                        // Try to extract the Swagger JSON URL
-                        // Look for the url: pattern in the Swagger UI JavaScript
-                        var urlMatch = Regex.Match(htmlContent, @"url:\s*[""'](.+?)[""']");
-                        if (urlMatch.Success)
-                        {
-                            var jsonPath = urlMatch.Groups[1].Value;
-                            
-                            // If it's a relative URL, combine with the base URL
-                            if (jsonPath.StartsWith("/"))
-                            {
-                                var uri = new Uri(swaggerUrl);
-                                var baseUrl = $"{uri.Scheme}://{uri.Authority}";
-                                actualSwaggerUrl = baseUrl + jsonPath;
-                            }
-                            else if (!jsonPath.StartsWith("http"))
-                            {
-                                // Handle relative path without leading slash
-                                var uri = new Uri(swaggerUrl);
-                                var baseUrl = $"{uri.Scheme}://{uri.Authority}{uri.AbsolutePath}";
-                                // Remove the index.html or trailing slash if present
-                                baseUrl = Regex.Replace(baseUrl, @"(index\.html|/+)$", "");
-                                actualSwaggerUrl = baseUrl + "/" + jsonPath;
-                            }
-                            else
-                            {
-                                actualSwaggerUrl = jsonPath;
-                            }
-                            
-                            if (diagnosticMode && diagnostics != null)
-                            {
-                                diagnostics.ProcessingSteps.Add($"Found Swagger JSON URL: {actualSwaggerUrl}");
-                            }
-                        }
-                        else
-                        {
-                            // Try another common pattern: configUrl
-                            urlMatch = Regex.Match(htmlContent, @"configUrl:\s*[""'](.+?)[""']");
-                            if (urlMatch.Success)
-                            {
-                                var jsonPath = urlMatch.Groups[1].Value;
-                                
-                                // Handle relative or absolute URL as above
-                                if (jsonPath.StartsWith("/"))
-                                {
-                                    var uri = new Uri(swaggerUrl);
-                                    var baseUrl = $"{uri.Scheme}://{uri.Authority}";
-                                    actualSwaggerUrl = baseUrl + jsonPath;
-                                }
-                                else if (!jsonPath.StartsWith("http"))
-                                {
-                                    var uri = new Uri(swaggerUrl);
-                                    var baseUrl = $"{uri.Scheme}://{uri.Authority}{uri.AbsolutePath}";
-                                    baseUrl = Regex.Replace(baseUrl, @"(index\.html|/+)$", "");
-                                    actualSwaggerUrl = baseUrl + "/" + jsonPath;
-                                }
-                                else
-                                {
-                                    actualSwaggerUrl = jsonPath;
-                                }
-                                
-                                if (diagnosticMode && diagnostics != null)
-                                {
-                                    diagnostics.ProcessingSteps.Add($"Found Swagger JSON URL from configUrl: {actualSwaggerUrl}");
-                                }
-                            }
-                            else
-                            {
-                                // If we can't find the URL in the HTML, try some common endpoints
-                                var uri = new Uri(swaggerUrl);
-                                var baseUrl = $"{uri.Scheme}://{uri.Authority}";
-                                var pathParts = uri.AbsolutePath.Split('/');
-                                var apiVersion = "v1";
-                                
-                                // Try to extract API version from the path
-                                foreach (var part in pathParts)
-                                {
-                                    if (part.StartsWith("v") && part.Length > 1 && char.IsDigit(part[1]))
-                                    {
-                                        apiVersion = part;
-                                        break;
-                                    }
-                                }
-                                
-                                // Try common Swagger JSON endpoints
-                                var commonEndpoints = new[]
-                                {
-                                    $"{baseUrl}/swagger/{apiVersion}/swagger.json",
-                                    $"{baseUrl}/swagger/v1/swagger.json",
-                                    $"{baseUrl}/api-docs",
-                                    $"{baseUrl}/swagger/swagger.json",
-                                    $"{baseUrl}/openapi.json"
-                                };
-                                
-                                if (diagnosticMode && diagnostics != null)
-                                {
-                                    diagnostics.ProcessingSteps.Add("Could not find Swagger JSON URL in HTML, trying common endpoints");
-                                }
-                                
-                                foreach (var endpoint in commonEndpoints)
-                                {
-                                    try
-                                    {
-                                        var testResponse = await httpClient.GetAsync(endpoint);
-                                        if (testResponse.IsSuccessStatusCode)
-                                        {
-                                            actualSwaggerUrl = endpoint;
-                                            if (diagnosticMode && diagnostics != null)
-                                            {
-                                                diagnostics.ProcessingSteps.Add($"Found working Swagger JSON endpoint: {actualSwaggerUrl}");
-                                            }
-                                            break;
-                                        }
-                                    }
-                                    catch
-                                    {
-                                        // Continue trying other endpoints
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Now fetch the actual Swagger JSON
-                    if (diagnosticMode && diagnostics != null) diagnostics.ProcessingSteps.Add($"Fetching Swagger JSON from: {actualSwaggerUrl}");
                     response = await httpClient.GetAsync(actualSwaggerUrl);
                     response.EnsureSuccessStatusCode();
 
@@ -233,12 +112,13 @@ namespace MCPConvert.Services
                 }
 
                 // Convert to MCP JSON
-                if (diagnosticMode) diagnostics.ProcessingSteps.Add("Converting Swagger to MCP JSON");
+                if (diagnosticMode && diagnostics != null) 
+                    diagnostics.ProcessingSteps.Add("Converting Swagger to MCP JSON");
+                
                 var conversionStartTime = stopwatch.Elapsed.TotalMilliseconds;
+                var mcpJson = _openApiConverter.ConvertToMcp(openApiDocument, sourceMap, diagnostics, diagnosticMode);
 
-                var mcpJson = ConvertOpenApiToMcp(openApiDocument, sourceMap, diagnostics, diagnosticMode);
-
-                if (diagnosticMode)
+                if (diagnosticMode && diagnostics != null)
                 {
                     diagnostics.PerformanceMetrics["ConversionTime"] = stopwatch.Elapsed.TotalMilliseconds - conversionStartTime;
                     diagnostics.ProcessingSteps.Add("Conversion completed successfully");
@@ -253,7 +133,7 @@ namespace MCPConvert.Services
                 }
 
                 stopwatch.Stop();
-                if (diagnosticMode)
+                if (diagnosticMode && diagnostics != null)
                 {
                     diagnostics.PerformanceMetrics["TotalTime"] = stopwatch.Elapsed.TotalMilliseconds;
                 }
@@ -272,7 +152,7 @@ namespace MCPConvert.Services
             {
                 _logger.LogError(ex, "Error converting Swagger from URL");
 
-                if (diagnosticMode)
+                if (diagnosticMode && diagnostics != null)
                 {
                     diagnostics.ProcessingSteps.Add($"Unexpected error: {ex.Message}");
                     diagnostics.Warnings.Add($"Exception: {ex.GetType().Name}");
@@ -318,12 +198,13 @@ namespace MCPConvert.Services
                 }
                 
                 // Convert to MCP JSON
-                if (diagnosticMode) diagnostics.ProcessingSteps.Add("Converting Swagger to MCP JSON");
+                if (diagnosticMode && diagnostics != null) 
+                    diagnostics.ProcessingSteps.Add("Converting Swagger to MCP JSON");
+                
                 var conversionStartTime = stopwatch.Elapsed.TotalMilliseconds;
+                var mcpJson = _openApiConverter.ConvertToMcp(openApiDocument, sourceMap, diagnostics, diagnosticMode);
                 
-                var mcpJson = ConvertOpenApiToMcp(openApiDocument, sourceMap, diagnostics, diagnosticMode);
-                
-                if (diagnosticMode)
+                if (diagnosticMode && diagnostics != null)
                 {
                     diagnostics.PerformanceMetrics["ConversionTime"] = stopwatch.Elapsed.TotalMilliseconds - conversionStartTime;
                     diagnostics.ProcessingSteps.Add("Conversion completed successfully");
@@ -338,7 +219,7 @@ namespace MCPConvert.Services
                 }
                 
                 stopwatch.Stop();
-                if (diagnosticMode)
+                if (diagnosticMode && diagnostics != null)
                 {
                     diagnostics.PerformanceMetrics["TotalTime"] = stopwatch.Elapsed.TotalMilliseconds;
                 }
@@ -357,7 +238,7 @@ namespace MCPConvert.Services
             {
                 _logger.LogError(ex, "Error converting Swagger from stream");
                 
-                if (diagnosticMode)
+                if (diagnosticMode && diagnostics != null)
                 {
                     diagnostics.ProcessingSteps.Add($"Unexpected error: {ex.Message}");
                     diagnostics.Warnings.Add($"Exception: {ex.GetType().Name}");
@@ -371,6 +252,33 @@ namespace MCPConvert.Services
                     Timestamp = DateTime.UtcNow
                 };
             }
+        }
+
+        /// <summary>
+        /// Detects the actual Swagger/OpenAPI JSON URL from a given URL
+        /// </summary>
+        /// <param name="url">URL to check, may be a Swagger UI URL or direct JSON URL</param>
+        /// <param name="diagnosticMode">Whether to run in diagnostic mode</param>
+        /// <param name="diagnostics">Diagnostics object to update if in diagnostic mode</param>
+        /// <returns>The detected Swagger/OpenAPI JSON URL</returns>
+        private async Task<string> DetectSwaggerJsonUrlAsync(string url, bool diagnosticMode, ConversionDiagnostics? diagnostics)
+        {
+            // Try each detector in sequence until one can handle the URL
+            foreach (var detector in _urlDetectors)
+            {
+                if (detector.CanHandle(url))
+                {
+                    var detectedUrl = await detector.DetectSwaggerJsonUrlAsync(url, diagnosticMode, diagnostics);
+                    if (detectedUrl != url) // If the detector found a different URL
+                    {
+                        _logger.LogInformation($"Detector {detector.GetType().Name} detected Swagger JSON URL: {detectedUrl}");
+                        return detectedUrl;
+                    }
+                }
+            }
+            
+            // If no detector found a different URL, return the original
+            return url;
         }
 
         private async Task<OpenApiDocument?> ParseSwaggerDocumentAsync(Stream swaggerStream, ConversionDiagnostics? diagnostics, bool diagnosticMode)
@@ -424,228 +332,6 @@ namespace MCPConvert.Services
                 _logger.LogError(ex, "Error parsing Swagger document");
                 return null;
             }
-        }
-        
-        private string ConvertOpenApiToMcp(OpenApiDocument openApiDocument, Dictionary<string, SourceMapEntry>? sourceMap, ConversionDiagnostics? diagnostics, bool diagnosticMode)
-        {
-            try
-            {
-                // Create the MCP context structure
-                var mcpContext = new JObject
-                {
-                    ["schema"] = "mcp",
-                    ["version"] = "0.1.0",
-                    ["metadata"] = new JObject
-                    {
-                        ["title"] = openApiDocument.Info.Title ?? "API",
-                        ["description"] = openApiDocument.Info.Description ?? "",
-                        ["version"] = openApiDocument.Info.Version ?? "1.0.0"
-                    },
-                    ["tools"] = new JArray()
-                };
-                
-                // Process each path and operation in the OpenAPI document
-                foreach (var pathItem in openApiDocument.Paths)
-                {
-                    string path = pathItem.Key;
-                    
-                    foreach (var operation in pathItem.Value.Operations)
-                    {
-                        string method = operation.Key.ToString().ToLowerInvariant();
-                        var operationValue = operation.Value;
-                        
-                        // Create a tool for each operation
-                        var tool = new JObject
-                        {
-                            ["name"] = GetToolName(operationValue, path, method),
-                            ["description"] = operationValue.Description ?? operationValue.Summary ?? $"{method.ToUpperInvariant()} {path}",
-                            ["parameters"] = new JObject
-                            {
-                                ["properties"] = new JObject(),
-                                ["type"] = "object"
-                            }
-                        };
-                        
-                        // Add parameters
-                        var properties = (JObject)tool["parameters"]["properties"];
-                        var requiredParams = new JArray();
-                        
-                        // Path parameters
-                        foreach (var parameter in operationValue.Parameters.Where(p => p.In == ParameterLocation.Path))
-                        {
-                            AddParameterToTool(properties, parameter, requiredParams, sourceMap, $"{path}.{method}.parameters.{parameter.Name}");
-                        }
-                        
-                        // Query parameters
-                        foreach (var parameter in operationValue.Parameters.Where(p => p.In == ParameterLocation.Query))
-                        {
-                            AddParameterToTool(properties, parameter, requiredParams, sourceMap, $"{path}.{method}.parameters.{parameter.Name}");
-                        }
-                        
-                        // Request body
-                        if (operationValue.RequestBody != null)
-                        {
-                            // Find JSON content type
-                            var jsonContent = operationValue.RequestBody.Content.FirstOrDefault(c => 
-                                c.Key.Contains("json", StringComparison.OrdinalIgnoreCase));
-                                
-                            if (jsonContent.Value != null && jsonContent.Value.Schema != null)
-                            {
-                                // Add body parameter
-                                var bodyParam = new JObject
-                                {
-                                    ["description"] = operationValue.RequestBody.Description ?? "Request body",
-                                    ["type"] = GetJsonSchemaType(jsonContent.Value.Schema.Type)
-                                };
-                                
-                                // Handle schema properties for objects
-                                if (jsonContent.Value.Schema.Type == "object" && jsonContent.Value.Schema.Properties.Count > 0)
-                                {
-                                    bodyParam["properties"] = new JObject();
-                                    
-                                    foreach (var prop in jsonContent.Value.Schema.Properties)
-                                    {
-                                        ((JObject)bodyParam["properties"])[prop.Key] = new JObject
-                                        {
-                                            ["type"] = GetJsonSchemaType(prop.Value.Type),
-                                            ["description"] = prop.Value.Description ?? prop.Key
-                                        };
-                                        
-                                        if (sourceMap != null)
-                                        {
-                                            sourceMap[$"tools[{((JArray)mcpContext["tools"]).Count}].parameters.properties.body.properties.{prop.Key}"] = 
-                                                new SourceMapEntry { SwaggerPath = $"{path}.{method}.requestBody.content.{jsonContent.Key}.schema.properties.{prop.Key}", LineNumber = 0 };
-                                        }
-                                    }
-                                    
-                                    if (jsonContent.Value.Schema.Required.Count > 0)
-                                    {
-                                        bodyParam["required"] = new JArray(jsonContent.Value.Schema.Required);
-                                    }
-                                }
-                                
-                                properties["body"] = bodyParam;
-                                
-                                if (operationValue.RequestBody.Required)
-                                {
-                                    requiredParams.Add("body");
-                                }
-                                
-                                if (sourceMap != null)
-                                {
-                                    sourceMap[$"tools[{((JArray)mcpContext["tools"]).Count}].parameters.properties.body"] = 
-                                        new SourceMapEntry { SwaggerPath = $"{path}.{method}.requestBody", LineNumber = 0 };
-                                }
-                            }
-                        }
-                        
-                        // Add required parameters if any
-                        if (requiredParams.Count > 0)
-                        {
-                            tool["parameters"]["required"] = requiredParams;
-                        }
-                        
-                        // Add source mapping for the tool
-                        if (sourceMap != null)
-                        {
-                            sourceMap[$"tools[{((JArray)mcpContext["tools"]).Count}]"] = 
-                                new SourceMapEntry { SwaggerPath = $"{path}.{method}", LineNumber = 0 };
-                        }
-                        
-                        // Add the tool to the tools array
-                        ((JArray)mcpContext["tools"]).Add(tool);
-                    }
-                }
-                
-                if (diagnosticMode && diagnostics != null)
-                {
-                    diagnostics.ProcessingSteps.Add($"Created {((JArray)mcpContext["tools"]).Count} MCP tools from {openApiDocument.Paths.Count} paths");
-                }
-                
-                return mcpContext.ToString(Formatting.Indented);
-            }
-            catch (Exception ex)
-            {
-                if (diagnosticMode && diagnostics != null)
-                {
-                    diagnostics.ProcessingSteps.Add($"Error during MCP conversion: {ex.Message}");
-                    diagnostics.Warnings.Add($"Conversion exception: {ex.GetType().Name}");
-                }
-                
-                _logger.LogError(ex, "Error converting OpenAPI to MCP");
-                throw;
-            }
-        }
-        
-        private string GetToolName(OpenApiOperation operation, string path, string method)
-        {
-            // First try to use operationId if available
-            if (operation != null && !string.IsNullOrEmpty(operation.OperationId))
-            {
-                return operation.OperationId;
-            }
-            
-            // Otherwise, generate a name from the path and method
-            var pathSegments = path.Split('/')
-                .Where(s => !string.IsNullOrEmpty(s))
-                .Select(s => s.StartsWith("{") && s.EndsWith("}") ? $"By{s.Substring(1, s.Length - 2)}" : s)
-                .ToList();
-                
-            if (pathSegments.Count == 0)
-            {
-                return $"{method}Root";
-            }
-            
-            // Convert to camelCase
-            var result = method + string.Join("", pathSegments.Select(s => char.ToUpperInvariant(s[0]) + s.Substring(1)));
-            
-            // Remove non-alphanumeric characters
-            return Regex.Replace(result, "[^a-zA-Z0-9]", "");
-        }
-        
-        private void AddParameterToTool(JObject properties, OpenApiParameter parameter, JArray requiredParams, Dictionary<string, SourceMapEntry>? sourceMap, string swaggerPath)
-        {
-            if (properties == null || parameter == null || parameter.Schema == null) return;
-            
-            var paramObj = new JObject
-            {
-                ["description"] = parameter.Description ?? parameter.Name,
-                ["type"] = GetJsonSchemaType(parameter.Schema.Type)
-            };
-            
-            // Add enum values if present
-            if (parameter.Schema.Enum != null && parameter.Schema.Enum.Count > 0)
-            {
-                paramObj["enum"] = new JArray(parameter.Schema.Enum.Select(e => JToken.FromObject(e)));
-            }
-            
-            properties[parameter.Name] = paramObj;
-            
-            if (parameter.Required)
-            {
-                requiredParams.Add(parameter.Name);
-            }
-            
-            // Add source mapping
-            if (sourceMap != null)
-            {
-                int toolIndex = 0; // This would need to be passed in from the calling context
-                sourceMap[$"tools[{toolIndex}].parameters.properties.{parameter.Name}"] = 
-                    new SourceMapEntry { SwaggerPath = swaggerPath, LineNumber = 0 };
-            }
-        }
-        
-        private string GetJsonSchemaType(string? openApiType)
-        {
-            return openApiType switch
-            {
-                "integer" => "integer",
-                "number" => "number",
-                "boolean" => "boolean",
-                "array" => "array",
-                "object" => "object",
-                _ => "string"  // Default to string for null or unknown types
-            };
         }
     }
 }

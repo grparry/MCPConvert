@@ -1,0 +1,7 @@
+ENDPOINT: Swagger Petstore - https://petstore.swagger.io/v2/swagger.json
+----------------------------------------
+RESPONSE:
+
+
+Raw response size:        0 bytes
+❌ FAILED

@@ -1,0 +1,13 @@
+ENDPOINT: BMC Discovery API - https://docs.bmc.com/xwiki/bin/view/IT-Operations-Management/Discovery/BMC-Discovery/DISCO121/Integrating/Using-the-REST-API/Swagger-and-the-REST-API/
+----------------------------------------
+RESPONSE:
+{"success":false,"errorMessage":"Failed to parse Swagger document","mcpJson":null,"contentHash":null,"sourceMap":null,"diagnostics":{"warnings":["Parse exception: NullReferenceException"],"processingSteps":["Starting conversion from URL: https://docs.bmc.com/xwiki/bin/view/IT-Operations-Management/Discovery/BMC-Discovery/DISCO121/Integrating/Using-the-REST-API/Swagger-and-the-REST-API/","Trying common Swagger/OpenAPI endpoints","Fetching Swagger JSON from: https://docs.bmc.com/xwiki/bin/view/IT-Operations-Management/Discovery/BMC-Discovery/DISCO121/Integrating/Using-the-REST-API/Swagger-and-the-REST-API/","Swagger document fetched successfully (85237 bytes)","Error parsing Swagger document: Object reference not set to an instance of an object."],"performanceMetrics":{"FetchTime":12294.4844,"ParseTime":0.8158}},"timestamp":"2025-04-24T17:20:07.152348Z"}
+
+❌ FAILED
+Error: Failed to parse Swagger document
+Diagnostic steps:
+Starting conversion from URL: https://docs.bmc.com/xwiki/bin/view/IT-Operations-Management/Discovery/BMC-Discovery/DISCO121/Integrating/Using-the-REST-API/Swagger-and-the-REST-API/
+Trying common Swagger/OpenAPI endpoints
+Fetching Swagger JSON from: https://docs.bmc.com/xwiki/bin/view/IT-Operations-Management/Discovery/BMC-Discovery/DISCO121/Integrating/Using-the-REST-API/Swagger-and-the-REST-API/
+Swagger document fetched successfully (85237 bytes)
+Error parsing Swagger document: Object reference not set to an instance of an object.

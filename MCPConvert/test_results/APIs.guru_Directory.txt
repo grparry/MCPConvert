@@ -1,0 +1,12 @@
+ENDPOINT: APIs.guru Directory - https://api.apis.guru/v2/list.json
+----------------------------------------
+RESPONSE:
+{"success":false,"errorMessage":"Failed to parse Swagger document","mcpJson":null,"contentHash":null,"sourceMap":null,"diagnostics":{"warnings":["Parse exception: OpenApiUnsupportedSpecVersionException"],"processingSteps":["Starting conversion from URL: https://api.apis.guru/v2/list.json","Fetching Swagger JSON from: https://api.apis.guru/v2/list.json","Swagger document fetched successfully (8855361 bytes)","Error parsing Swagger document: OpenAPI specification version '' is not supported."],"performanceMetrics":{"FetchTime":980.5145}},"timestamp":"2025-04-24T17:19:40.462627Z"}
+
+❌ FAILED
+Error: Failed to parse Swagger document
+Diagnostic steps:
+Starting conversion from URL: https://api.apis.guru/v2/list.json
+Fetching Swagger JSON from: https://api.apis.guru/v2/list.json
+Swagger document fetched successfully (8855361 bytes)
+Error parsing Swagger document: OpenAPI specification version '' is not supported.

@@ -1,0 +1,7 @@
+ENDPOINT: BMC Discovery API - https://docs.bmc.com/xwiki/bin/view/IT-Operations-Management/Discovery/BMC-Discovery/DISCO121/Integrating/Using-the-REST-API/Swagger-and-the-REST-API/
+----------------------------------------
+RESPONSE:
+
+
+Raw response size:        0 bytes
+❌ FAILED

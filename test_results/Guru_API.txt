@@ -1,0 +1,7 @@
+ENDPOINT: Guru API - https://api.getguru.com/api/v1/swagger.json
+----------------------------------------
+RESPONSE:
+
+
+Raw response size:        0 bytes
+❌ FAILED

@@ -40,7 +40,7 @@ namespace MCPConvert.Controllers
 
             // Check usage quota
             var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-            if (!_usageTrackingService.CanPerformConversion(clientIp))
+            if (_usageTrackingService.IsClientQuotaExceeded(clientIp) || _usageTrackingService.IsDailyQuotaExceeded())
             {
                 return BadRequest(new ConversionResponse
                 {
@@ -51,7 +51,7 @@ namespace MCPConvert.Controllers
 
             // Check cache
             var cacheKey = $"url:{swaggerUrl}:map:{includeSourceMapping}:diag:{diagnosticMode}";
-            var cachedResponse = _cacheService.GetCachedResponse(cacheKey);
+            var cachedResponse = _cacheService.GetCachedResult(cacheKey);
             if (cachedResponse != null)
             {
                 return Ok(cachedResponse);
@@ -63,10 +63,11 @@ namespace MCPConvert.Controllers
                 var response = await _converter.ConvertFromUrlAsync(swaggerUrl, includeSourceMapping, diagnosticMode);
                 
                 // Track usage
-                _usageTrackingService.TrackConversion(clientIp);
+                var processingTime = System.Diagnostics.Stopwatch.GetTimestamp() / 10000; // approximate ms
+                _usageTrackingService.RecordConversion(clientIp, processingTime);
                 
                 // Cache response
-                _cacheService.CacheResponse(cacheKey, response);
+                _cacheService.CacheResult(cacheKey, response);
                 
                 return Ok(response);
             }
@@ -97,7 +98,7 @@ namespace MCPConvert.Controllers
 
             // Check usage quota
             var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-            if (!_usageTrackingService.CanPerformConversion(clientIp))
+            if (_usageTrackingService.IsClientQuotaExceeded(clientIp) || _usageTrackingService.IsDailyQuotaExceeded())
             {
                 return BadRequest(new ConversionResponse
                 {
@@ -113,13 +114,14 @@ namespace MCPConvert.Controllers
                 var response = await _converter.ConvertFromStreamAsync(stream, includeSourceMapping, diagnosticMode);
                 
                 // Track usage
-                _usageTrackingService.TrackConversion(clientIp);
+                var processingTime = System.Diagnostics.Stopwatch.GetTimestamp() / 10000; // approximate ms
+                _usageTrackingService.RecordConversion(clientIp, processingTime);
                 
                 // Cache response (using file hash as part of key)
                 var fileName = swaggerFile.FileName;
                 var fileSize = swaggerFile.Length;
                 var cacheKey = $"file:{fileName}:{fileSize}:map:{includeSourceMapping}:diag:{diagnosticMode}";
-                _cacheService.CacheResponse(cacheKey, response);
+                _cacheService.CacheResult(cacheKey, response);
                 
                 return Ok(response);
             }
@@ -137,7 +139,7 @@ namespace MCPConvert.Controllers
         public ActionResult<object> GetStats()
         {
             var cacheStats = _cacheService.GetStatistics();
-            var usageStats = _usageTrackingService.GetGlobalStatistics();
+            var usageStats = _usageTrackingService.GetStatistics();
             
             return Ok(new
             {

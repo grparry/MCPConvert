@@ -1,0 +1,94 @@
+@page
+@model MCPConvert.Pages.ConvertMcpToSwaggerModel
+@{
+    ViewData["Title"] = "MCP to Swagger/OpenAPI Converter";
+}
+
+<h2>MCP to Swagger/OpenAPI Converter</h2>
+
+<form method="post" enctype="multipart/form-data">
+    <div class="form-group mb-2">
+        <label asp-for="McpInput">MCP JSON Input</label>
+        <textarea asp-for="McpInput" class="form-control" rows="10" placeholder="Paste your MCP JSON here or upload a file below"></textarea>
+        <span asp-validation-for="McpInput" class="text-danger"></span>
+    </div>
+    <div class="form-group mb-2">
+        <label for="McpFile">OR Upload MCP JSON File</label>
+        <div id="dropZone" class="border border-primary rounded p-3 mb-2 text-center bg-light" style="cursor:pointer;">
+            <span id="dropZoneText">Drag &amp; drop your MCP JSON file here</span>
+            <br />
+            <input type="file" name="McpFile" id="McpFile" class="form-control mt-2" accept="application/json,.json" style="display:none;" />
+            <button type="button" class="btn btn-outline-primary btn-sm mt-2" onclick="document.getElementById('McpFile').click();">Choose File</button>
+            <span id="fileName" class="ms-2"></span>
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary mt-2">Convert (from text or file)</button>
+</form>
+
+@if (!string.IsNullOrEmpty(Model.ErrorMessage))
+{
+    <div class="alert alert-danger mt-3">@Model.ErrorMessage</div>
+}
+
+@if (!string.IsNullOrEmpty(Model.SwaggerOutput))
+{
+    <div class="mt-4">
+        <h4>Swagger/OpenAPI Output</h4>
+        <pre class="bg-light p-3" style="white-space:pre-wrap; word-break:break-all;">@Model.SwaggerOutput</pre>
+    </div>
+}
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('McpFile');
+        const fileNameSpan = document.getElementById('fileName');
+        const dropZoneText = document.getElementById('dropZoneText');
+        const mcpInputTextarea = document.getElementById('McpInput');
+
+        dropZone.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            dropZone.classList.add('bg-primary', 'text-white');
+            dropZone.classList.remove('bg-light');
+        });
+        dropZone.addEventListener('dragleave', function(e) {
+            dropZone.classList.remove('bg-primary', 'text-white');
+            dropZone.classList.add('bg-light');
+        });
+        dropZone.addEventListener('drop', function(e) {
+            e.preventDefault();
+            dropZone.classList.remove('bg-primary', 'text-white');
+            dropZone.classList.add('bg-light');
+            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                const file = e.dataTransfer.files[0];
+                fileInput.files = e.dataTransfer.files;
+                fileNameSpan.textContent = file.name;
+                dropZoneText.textContent = 'File ready: ' + file.name;
+                // Read file as text and set textarea value
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    mcpInputTextarea.value = evt.target.result;
+                };
+                reader.readAsText(file);
+            }
+        });
+        fileInput.addEventListener('change', function(e) {
+            if (fileInput.files && fileInput.files.length > 0) {
+                fileNameSpan.textContent = fileInput.files[0].name;
+                dropZoneText.textContent = 'File ready: ' + fileInput.files[0].name;
+                // Read file as text and set textarea value
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    mcpInputTextarea.value = evt.target.result;
+                };
+                reader.readAsText(fileInput.files[0]);
+            } else {
+                fileNameSpan.textContent = '';
+                dropZoneText.textContent = 'Drag & drop your MCP JSON file here';
+                mcpInputTextarea.value = '';
+            }
+        });
+    </script>
+}

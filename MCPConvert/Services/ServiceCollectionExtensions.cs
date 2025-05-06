@@ -27,6 +27,7 @@ namespace MCPConvert.Services
             // Register conversion services
             services.AddScoped<OpenApiToMcpConverter>();
             services.AddScoped<ISwaggerToMcpConverter, SwaggerToMcpConverter>();
+            services.AddScoped<IMcpToSwaggerConverter, McpToSwaggerConverter>();
             
             return services;
         }

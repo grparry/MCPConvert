@@ -14,6 +14,7 @@ using MCPConvert.Models;
 using MCPConvert.Services.Conversion;
 using MCPConvert.Services.UrlDetection;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace MCPConvert.Services
 {
@@ -142,9 +143,9 @@ namespace MCPConvert.Services
                 }
 
                 // Parse the Swagger document
-                var swaggerStream = new MemoryStream(Encoding.UTF8.GetBytes(content));
+                using var swaggerStream = new MemoryStream(Encoding.UTF8.GetBytes(content));
                 var openApiDocument = await ParseSwaggerDocumentAsync(swaggerStream, diagnostics, diagnosticMode);
-
+                
                 if (openApiDocument == null)
                 {
                     return new ConversionResponse
@@ -162,13 +163,13 @@ namespace MCPConvert.Services
                 
                 var conversionStartTime = stopwatch.Elapsed.TotalMilliseconds;
                 var mcpJson = _openApiConverter.ConvertToMcp(openApiDocument, sourceMap, diagnostics, diagnosticMode);
-
+                
                 if (diagnosticMode && diagnostics != null)
                 {
                     diagnostics.PerformanceMetrics["ConversionTime"] = stopwatch.Elapsed.TotalMilliseconds - conversionStartTime;
                     diagnostics.ProcessingSteps.Add("Conversion completed successfully");
                 }
-
+                
                 // Calculate content hash for idempotency
                 string contentHash;
                 using (var sha256 = SHA256.Create())
@@ -176,13 +177,13 @@ namespace MCPConvert.Services
                     var hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(mcpJson));
                     contentHash = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
                 }
-
+                
                 stopwatch.Stop();
                 if (diagnosticMode && diagnostics != null)
                 {
                     diagnostics.PerformanceMetrics["TotalTime"] = stopwatch.Elapsed.TotalMilliseconds;
                 }
-
+                
                 return new ConversionResponse
                 {
                     Success = true,
@@ -196,13 +197,13 @@ namespace MCPConvert.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error converting Swagger from URL");
-
+                
                 if (diagnosticMode && diagnostics != null)
                 {
                     diagnostics.ProcessingSteps.Add($"Unexpected error: {ex.Message}");
                     diagnostics.Warnings.Add($"Exception: {ex.GetType().Name}");
                 }
-
+                
                 return new ConversionResponse
                 {
                     Success = false,
@@ -220,6 +221,21 @@ namespace MCPConvert.Services
             stopwatch.Start();
             var diagnostics = diagnosticMode ? new ConversionDiagnostics() : null;
             var sourceMap = includeSourceMapping ? new Dictionary<string, SourceMapEntry>() : null;
+            
+            try
+            {
+                if (diagnosticMode && diagnostics != null)
+                {
+                    diagnostics.ProcessingSteps.Add("Starting conversion from uploaded file");
+                }
+                
+                // Parse the Swagger document
+                var openApiDocument = await ParseSwaggerDocumentAsync(swaggerStream, diagnostics, diagnosticMode);
+                
+                if (openApiDocument == null)
+                {
+                    return new ConversionResponse
+                    {
                         Success = false,
                         ErrorMessage = "Failed to parse Swagger document",
                         Diagnostics = diagnostics,
@@ -324,12 +340,14 @@ namespace MCPConvert.Services
                 
                 // Preprocess for OpenAPI 3.1.0 support
                 bool isOpenApi31 = false;
+                string originalContent = string.Empty;
                 try
                 {
                     // First check if this is an OpenAPI 3.1.0 document
                     memoryStream.Position = 0;
-                    using var reader = new StreamReader(memoryStream, leaveOpen: true);
-                    var jsonContent = await reader.ReadToEndAsync();
+                    using var streamReader = new StreamReader(memoryStream, leaveOpen: true);
+                    var jsonContent = await streamReader.ReadToEndAsync();
+                    originalContent = jsonContent; // Store the original content
                     memoryStream.Position = 0; // Reset for later use
                     
                     var jsonObj = JObject.Parse(jsonContent);
@@ -345,6 +363,13 @@ namespace MCPConvert.Services
                         
                         // Temporarily change version to 3.0.0 for parsing
                         jsonObj["openapi"] = "3.0.0";
+                        
+                        // Convert OpenAPI 3.1.0 type arrays with 'null' to OpenAPI 3.0 nullable:true
+                        ConvertTypeArraysToNullable(jsonObj);
+                        
+                        // Pre-process any external references that might cause issues
+                        PreProcessReferences(jsonObj);
+                        
                         var modifiedContent = jsonObj.ToString();
                         
                         // Replace the stream with modified content
@@ -361,9 +386,17 @@ namespace MCPConvert.Services
                     {
                         diagnostics.Warnings.Add($"Error preprocessing OpenAPI document: {ex.Message}");
                     }
-                    // Continue with original content
+                    // Continue with original content if available, otherwise reset stream
+                    if (!string.IsNullOrEmpty(originalContent))
+                    {
+                        memoryStream.SetLength(0);
+                        using var writer = new StreamWriter(memoryStream, leaveOpen: true);
+                        await writer.WriteAsync(originalContent);
+                        await writer.FlushAsync();
+                    }
                     memoryStream.Position = 0;
                 }
+            }
 
                 // Use OpenAPI reader to parse the document with enhanced settings for OpenAPI 3.1.0 support
                 // Create a default BaseUrl for reference resolution
@@ -371,10 +404,11 @@ namespace MCPConvert.Services
                 
                 var openApiReaderSettings = new OpenApiReaderSettings
                 {
-                    ReferenceResolution = ReferenceResolutionSetting.ResolveAllReferences,
+                    // Set to ResolveLocalReferences to avoid external reference failures
+                    ReferenceResolution = ReferenceResolutionSetting.ResolveLocalReferences,
                     BaseUrl = baseUrl // Set the BaseUrl for reference resolution
                 };
-                
+                    
                 // Create a reader for parsing the document with enhanced settings
                 var reader = new OpenApiStreamReader(openApiReaderSettings);
                 var readResult = await reader.ReadAsync(memoryStream);
@@ -388,43 +422,159 @@ namespace MCPConvert.Services
                         diagnostics.Warnings.Add($"OpenAPI parsing error: {error.Message}");
                     }
                     
+                    // Add parsing warnings to warnings in diagnostics
                     foreach (var warning in readResult.OpenApiDiagnostic.Warnings)
                     {
-                        diagnostics.Warnings.Add($"OpenAPI parsing warning: {warning.Message}");
+                        diagnostics.Warnings.Add($"OpenAPI parsing warning: {warning}");
                     }
-                }
-                
-                // Log the detected OpenAPI version
-                var detectedVersion = "unknown";
-                if (readResult.OpenApiDiagnostic != null && readResult.OpenApiDiagnostic.SpecificationVersion != null)
-                {
-                    detectedVersion = readResult.OpenApiDiagnostic.SpecificationVersion.ToString();
-                }
-                _logger.LogInformation($"Parsed OpenAPI document with version: {detectedVersion}");
-                if (diagnosticMode && diagnostics != null)
-                {
-                    diagnostics.ProcessingSteps.Add($"Parsed OpenAPI version: {detectedVersion}");
-                }
-                
-                if (diagnosticMode && diagnostics != null)
-                {
+                    
                     var elapsedMs = Stopwatch.GetElapsedTime(parseStartTime).TotalMilliseconds;
                     diagnostics.PerformanceMetrics["ParseTime"] = elapsedMs;
                     diagnostics.ProcessingSteps.Add($"Swagger document parsed successfully (format: {(readResult.OpenApiDiagnostic.SpecificationVersion)}, {readResult.OpenApiDocument.Paths.Count} paths)");
                 }
                 
                 return readResult.OpenApiDocument;
-            }
-            catch (Exception ex)
+        }
+        catch (Exception ex)
+        {
+            // Handle specific exception for external references
+            if (ex.Message.Contains("external references") || ex.Message.Contains("reference"))
             {
                 if (diagnosticMode && diagnostics != null)
                 {
-                    diagnostics.ProcessingSteps.Add($"Error parsing Swagger document: {ex.Message}");
-                    diagnostics.Warnings.Add($"Parse exception: {ex.GetType().Name}");
+                    diagnostics.ProcessingSteps.Add($"Error parsing Swagger document: Resolving external references is not supported");
+                    diagnostics.Warnings.Add($"External reference resolution error: {ex.Message}");
+                    
+                    var elapsedMs = Stopwatch.GetElapsedTime(parseStartTime).TotalMilliseconds;
+                    diagnostics.PerformanceMetrics["ParseTime"] = elapsedMs;
                 }
                 
-                _logger.LogError(ex, "Error parsing Swagger document");
+                _logger.LogError(ex, "External reference resolution error in Swagger document");
                 return null;
+            }
+            
+            // Handle other exceptions
+            if (diagnosticMode && diagnostics != null)
+            {
+                diagnostics.ProcessingSteps.Add($"Error parsing Swagger document: {ex.Message}");
+                diagnostics.Warnings.Add($"Exception: {ex.GetType().Name}");
+                
+                var elapsedMs = Stopwatch.GetElapsedTime(parseStartTime).TotalMilliseconds;
+                diagnostics.PerformanceMetrics["ParseTime"] = elapsedMs;
+            }
+            
+            _logger.LogError(ex, "Error parsing Swagger document");
+            return null;
+        }
+        
+        /// <summary>
+        /// Recursively converts OpenAPI 3.1.0 type arrays with 'null' to OpenAPI 3.0 nullable:true format
+        /// </summary>
+        /// <param name="token">The JSON token to process</param>
+        private void ConvertTypeArraysToNullable(JToken token)
+        {
+            if (token is JObject obj)
+            {
+                // Check if this object has a type property that is an array
+                if (obj["type"] is JArray typeArray)
+                {
+                    // If it's a type array that includes null
+                    bool hasNullType = false;
+                    string primaryType = null;
+                    
+                    foreach (var item in typeArray)
+                    {
+                        string typeValue = item.ToString();
+                        if (typeValue == "null")
+                        {
+                            hasNullType = true;
+                        }
+                        else
+                        {
+                            primaryType = typeValue; // Store the non-null type
+                        }
+                    }
+                    
+                    // Convert ["string", "null"] to {"type": "string", "nullable": true}
+                    if (hasNullType && primaryType != null)
+                    {
+                        obj["type"] = primaryType;
+                        obj["nullable"] = true;
+                    }
+                }
+                
+                // Process all properties of this object
+                foreach (var property in obj.Properties().ToList())
+                {
+                    ConvertTypeArraysToNullable(property.Value);
+                }
+            }
+            else if (token is JArray array)
+            {
+                // Process all items in the array
+                foreach (var item in array)
+                {
+                    ConvertTypeArraysToNullable(item);
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Pre-processes references in the OpenAPI document to handle potential issues
+        /// </summary>
+        /// <param name="token">The JSON token to process</param>
+        private void PreProcessReferences(JToken token)
+        {
+            if (token is JObject obj)
+            {
+                // Check if this object has both a $ref property and other properties (OpenAPI 3.1 feature)
+                if (obj["$ref"] != null && obj.Properties().Count() > 1)
+                {
+                    // In OpenAPI 3.0, $ref cannot have siblings, so we need to handle this specially
+                    // One approach is to convert to allOf with the reference as the first item
+                    string refValue = obj["$ref"].ToString();
+                    
+                    // Skip if it appears to be an external reference that could cause issues
+                    if (refValue.StartsWith("http") || refValue.Contains("#/components/examples/"))
+                    {
+                        // Remove the external reference to prevent parsing errors
+                        obj.Remove("$ref");
+                    }
+                    else if (!refValue.StartsWith("#/components/schemas/"))
+                    {
+                        // For non-schema references with siblings, convert to allOf structure
+                        var refObj = new JObject();
+                        refObj["$ref"] = refValue;
+                        
+                        // Create a clone without the $ref property
+                        var propertiesObj = new JObject();
+                        foreach (var prop in obj.Properties().Where(p => p.Name != "$ref"))
+                        {
+                            propertiesObj[prop.Name] = prop.Value;
+                        }
+                        
+                        // Clear all properties and set up allOf
+                        obj.RemoveAll();
+                        var allOfArray = new JArray();
+                        allOfArray.Add(refObj);
+                        allOfArray.Add(propertiesObj);
+                        obj["allOf"] = allOfArray;
+                    }
+                }
+                
+                // Process all properties of this object
+                foreach (var property in obj.Properties().ToList())
+                {
+                    PreProcessReferences(property.Value);
+                }
+            }
+            else if (token is JArray array)
+            {
+                // Process all items in the array
+                foreach (var item in array)
+                {
+                    PreProcessReferences(item);
+                }
             }
         }
     }

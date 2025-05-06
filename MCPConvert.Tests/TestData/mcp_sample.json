@@ -1,0 +1,149 @@
+{
+  "schema": "mcp",
+  "version": "0.1.0",
+  "metadata": {
+    "title": "MCP Test API",
+    "version": "1.0.0",
+    "description": "API for testing bidirectional conversion between MCP and OpenAPI"
+  },
+  "tools": [
+    {
+      "name": "getUser",
+      "description": "Retrieve user information",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "description": "ID of the user to retrieve"
+          },
+          "includeProfile": {
+            "type": "boolean",
+            "description": "Whether to include profile information"
+          }
+        },
+        "required": ["userId"]
+      }
+    },
+    {
+      "name": "createUser",
+      "description": "Create a new user",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "User's full name"
+              },
+              "email": {
+                "type": "string",
+                "description": "User's email address",
+                "nullable": true
+              },
+              "userType": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "enum": ["admin"]
+                  },
+                  {
+                    "type": "string", 
+                    "enum": ["regular"]
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "userType",
+                  "mapping": {
+                    "admin": "#/components/schemas/AdminUser",
+                    "regular": "#/components/schemas/RegularUser"
+                  }
+                },
+                "description": "Type of user account"
+              },
+              "preferences": {
+                "type": "object",
+                "properties": {
+                  "theme": {
+                    "type": "string",
+                    "enum": ["light", "dark", "system"]
+                  },
+                  "notifications": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "email": {
+                            "type": "boolean"
+                          },
+                          "push": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    ],
+                    "description": "Notification preferences"
+                  }
+                }
+              }
+            },
+            "required": ["name", "userType"]
+          }
+        },
+        "required": ["body"]
+      }
+    },
+    {
+      "name": "updateUserProfile",
+      "description": "Update a user's profile information",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "description": "ID of the user to update"
+          },
+          "body": {
+            "type": "object",
+            "properties": {
+              "avatarUrl": {
+                "type": "string",
+                "format": "uri",
+                "description": "URL to user's avatar",
+                "nullable": true
+              },
+              "bio": {
+                "type": "string",
+                "description": "User's biographical information",
+                "nullable": true
+              },
+              "links": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "title": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["url"]
+                },
+                "description": "User's social and other links"
+              }
+            }
+          }
+        },
+        "required": ["userId", "body"]
+      }
+    }
+  ]
+}

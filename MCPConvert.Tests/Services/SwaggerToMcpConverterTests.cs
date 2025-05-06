@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
+using Newtonsoft.Json.Linq;
 using MCPConvert.Models;
 using MCPConvert.Services;
 using MCPConvert.Services.Conversion;
@@ -25,7 +27,7 @@ namespace MCPConvert.Tests.Services
                 new Mock<ISwaggerUrlDetector>().Object 
             };
             var converterLoggerMock = new Mock<ILogger<OpenApiToMcpConverter>>();
-            var schemaTypeConverter = new SchemaTypeConverter();
+            var schemaTypeConverter = new SchemaTypeConverter(NullLogger<SchemaTypeConverter>.Instance);
             var openApiConverter = new OpenApiToMcpConverter(converterLoggerMock.Object, schemaTypeConverter);
             
             // Act - Create the converter with the dependencies

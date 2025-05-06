@@ -1,0 +1,374 @@
+using System;
+using System.IO;
+using System.Text;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi.Readers;
+using Moq;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Xunit;
+using MCPConvert.Models;
+using MCPConvert.Services;
+using MCPConvert.Services.Conversion;
+using MCPConvert.Services.Utilities;
+
+namespace MCPConvert.Tests.Services
+{
+    /// <summary>
+    /// Tests specifically for OpenAPI 3.1.0 support in the converter
+    /// </summary>
+    public class OpenApi31SupportTests
+    {
+        private readonly Mock<ILogger<OpenApiToMcpConverter>> _loggerMock;
+        private readonly SchemaTypeConverter _schemaTypeConverter;
+        private readonly OpenApiToMcpConverter _converter;
+
+        public OpenApi31SupportTests()
+        {
+            _loggerMock = new Mock<ILogger<OpenApiToMcpConverter>>();
+            _schemaTypeConverter = new SchemaTypeConverter();
+            _converter = new OpenApiToMcpConverter(_loggerMock.Object, _schemaTypeConverter);
+        }
+
+        [Fact]
+        public void CanConvert_OpenApi31Document_WithTypeArrays()
+        {
+            // Arrange
+            var document = new OpenApiDocument
+            {
+                Info = new OpenApiInfo
+                {
+                    Title = "OpenAPI 3.1 Test API",
+                    Version = "1.0.0",
+                    Description = "API for testing OpenAPI 3.1.0 features"
+                },
+                Paths = new OpenApiPaths
+                {
+                    ["/test-nullable"] = new OpenApiPathItem
+                    {
+                        Operations = new Dictionary<OperationType, OpenApiOperation>
+                        {
+                            [OperationType.Post] = new OpenApiOperation
+                            {
+                                OperationId = "testNullable",
+                                Description = "Test operation with nullable fields (OpenAPI 3.1.0 style)",
+                                RequestBody = new OpenApiRequestBody
+                                {
+                                    Content = new Dictionary<string, OpenApiMediaType>
+                                    {
+                                        ["application/json"] = new OpenApiMediaType
+                                        {
+                                            Schema = new OpenApiSchema
+                                            {
+                                                Type = "object",
+                                                Properties = new Dictionary<string, OpenApiSchema>
+                                                {
+                                                    ["nullableField"] = new OpenApiSchema
+                                                    {
+                                                        // In OpenAPI 3.1.0, null type is part of an array
+                                                        // This would normally be parsed from a JSON with ["string", "null"]
+                                                        OneOf = new List<OpenApiSchema>
+                                                        {
+                                                            new OpenApiSchema { Type = "string" },
+                                                            new OpenApiSchema { Type = "null" }
+                                                        },
+                                                        Description = "A nullable string field using OpenAPI 3.1.0 type array"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            // Act
+            string mcpJson = _converter.ConvertToMcp(document, null, null, false);
+            var mcpContext = JObject.Parse(mcpJson);
+
+            // Assert
+            Assert.NotNull(mcpContext);
+            Assert.Equal("mcp", mcpContext["schema"]?.ToString());
+            Assert.Equal("0.1.0", mcpContext["version"]?.ToString());
+            
+            // Verify tool exists
+            var tools = mcpContext["tools"] as JArray;
+            Assert.NotNull(tools);
+            Assert.Equal(1, tools.Count);
+            
+            // Verify the nullable field was properly converted
+            var tool = tools[0] as JObject;
+            var parameters = tool["parameters"] as JObject;
+            var properties = parameters["properties"] as JObject;
+            var body = properties["body"] as JObject;
+            var bodyProperties = body["properties"] as JObject;
+            var nullableField = bodyProperties["nullableField"] as JObject;
+            
+            // In MCP format, it should be marked as nullable
+            Assert.True(nullableField["nullable"]?.Value<bool>());
+        }
+
+        [Fact]
+        public void CanConvert_OpenApi31Document_WithSchemaComposition()
+        {
+            // Arrange
+            var document = new OpenApiDocument
+            {
+                Info = new OpenApiInfo
+                {
+                    Title = "OpenAPI 3.1 Composition Test API",
+                    Version = "1.0.0"
+                },
+                Paths = new OpenApiPaths
+                {
+                    ["/test-composition"] = new OpenApiPathItem
+                    {
+                        Operations = new Dictionary<OperationType, OpenApiOperation>
+                        {
+                            [OperationType.Post] = new OpenApiOperation
+                            {
+                                OperationId = "testComposition",
+                                Description = "Test operation with schema composition",
+                                RequestBody = new OpenApiRequestBody
+                                {
+                                    Content = new Dictionary<string, OpenApiMediaType>
+                                    {
+                                        ["application/json"] = new OpenApiMediaType
+                                        {
+                                            Schema = new OpenApiSchema
+                                            {
+                                                Type = "object",
+                                                Properties = new Dictionary<string, OpenApiSchema>
+                                                {
+                                                    ["oneOfField"] = new OpenApiSchema
+                                                    {
+                                                        OneOf = new List<OpenApiSchema>
+                                                        {
+                                                            new OpenApiSchema { Type = "string" },
+                                                            new OpenApiSchema { Type = "number" }
+                                                        },
+                                                        Description = "Field that can be either string or number"
+                                                    },
+                                                    ["anyOfField"] = new OpenApiSchema
+                                                    {
+                                                        AnyOf = new List<OpenApiSchema>
+                                                        {
+                                                            new OpenApiSchema { Type = "boolean" },
+                                                            new OpenApiSchema { Type = "object", Properties = new Dictionary<string, OpenApiSchema>
+                                                                {
+                                                                    ["subField"] = new OpenApiSchema { Type = "string" }
+                                                                }
+                                                            }
+                                                        },
+                                                        Description = "Field that can be boolean or an object"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            // Act
+            string mcpJson = _converter.ConvertToMcp(document, null, null, false);
+            var mcpContext = JObject.Parse(mcpJson);
+
+            // Assert
+            Assert.NotNull(mcpContext);
+            
+            // Verify the oneOf field was properly converted
+            var tools = mcpContext["tools"] as JArray;
+            var tool = tools[0] as JObject;
+            var parameters = tool["parameters"] as JObject;
+            var properties = parameters["properties"] as JObject;
+            var body = properties["body"] as JObject;
+            var bodyProperties = body["properties"] as JObject;
+            
+            // Check oneOf is preserved
+            var oneOfField = bodyProperties["oneOfField"] as JObject;
+            Assert.NotNull(oneOfField["oneOf"]);
+            var oneOfArray = oneOfField["oneOf"] as JArray;
+            Assert.Equal(2, oneOfArray.Count);
+            
+            // Check anyOf is preserved
+            var anyOfField = bodyProperties["anyOfField"] as JObject;
+            Assert.NotNull(anyOfField["anyOf"]);
+            var anyOfArray = anyOfField["anyOf"] as JArray;
+            Assert.Equal(2, anyOfArray.Count);
+        }
+
+        [Fact]
+        public void CanConvert_OpenApi31Document_WithDiscriminator()
+        {
+            // Arrange
+            var document = new OpenApiDocument
+            {
+                Info = new OpenApiInfo
+                {
+                    Title = "OpenAPI 3.1 Discriminator Test API",
+                    Version = "1.0.0"
+                },
+                Paths = new OpenApiPaths
+                {
+                    ["/test-discriminator"] = new OpenApiPathItem
+                    {
+                        Operations = new Dictionary<OperationType, OpenApiOperation>
+                        {
+                            [OperationType.Post] = new OpenApiOperation
+                            {
+                                OperationId = "testDiscriminator",
+                                Description = "Test operation with discriminator",
+                                RequestBody = new OpenApiRequestBody
+                                {
+                                    Content = new Dictionary<string, OpenApiMediaType>
+                                    {
+                                        ["application/json"] = new OpenApiMediaType
+                                        {
+                                            Schema = new OpenApiSchema
+                                            {
+                                                OneOf = new List<OpenApiSchema>
+                                                {
+                                                    new OpenApiSchema
+                                                    {
+                                                        Type = "object",
+                                                        Properties = new Dictionary<string, OpenApiSchema>
+                                                        {
+                                                            ["type"] = new OpenApiSchema { Type = "string", Enum = new List<IOpenApiAny> { new OpenApiString("dog") } },
+                                                            ["bark"] = new OpenApiSchema { Type = "boolean" }
+                                                        }
+                                                    },
+                                                    new OpenApiSchema
+                                                    {
+                                                        Type = "object",
+                                                        Properties = new Dictionary<string, OpenApiSchema>
+                                                        {
+                                                            ["type"] = new OpenApiSchema { Type = "string", Enum = new List<IOpenApiAny> { new OpenApiString("cat") } },
+                                                            ["meow"] = new OpenApiSchema { Type = "boolean" }
+                                                        }
+                                                    }
+                                                },
+                                                Discriminator = new OpenApiDiscriminator
+                                                {
+                                                    PropertyName = "type",
+                                                    Mapping = new Dictionary<string, string>
+                                                    {
+                                                        ["dog"] = "#/components/schemas/Dog",
+                                                        ["cat"] = "#/components/schemas/Cat"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            // Act
+            string mcpJson = _converter.ConvertToMcp(document, null, null, false);
+            var mcpContext = JObject.Parse(mcpJson);
+
+            // Assert
+            Assert.NotNull(mcpContext);
+            
+            // Verify the discriminator was properly converted
+            var tools = mcpContext["tools"] as JArray;
+            var tool = tools[0] as JObject;
+            var parameters = tool["parameters"] as JObject;
+            var properties = parameters["properties"] as JObject;
+            var body = properties["body"] as JObject;
+            
+            // Check discriminator is preserved
+            Assert.NotNull(body["oneOf"]);
+            Assert.NotNull(body["discriminator"]);
+            var discriminator = body["discriminator"] as JObject;
+            Assert.Equal("type", discriminator["propertyName"]?.ToString());
+            Assert.NotNull(discriminator["mapping"]);
+        }
+
+        [Fact]
+        public void CanConvert_OpenApi31Document_WithReferencesAndProperties()
+        {
+            // Arrange
+            var document = new OpenApiDocument
+            {
+                Info = new OpenApiInfo
+                {
+                    Title = "OpenAPI 3.1 Reference Test API",
+                    Version = "1.0.0"
+                },
+                Paths = new OpenApiPaths
+                {
+                    ["/test-reference"] = new OpenApiPathItem
+                    {
+                        Operations = new Dictionary<OperationType, OpenApiOperation>
+                        {
+                            [OperationType.Post] = new OpenApiOperation
+                            {
+                                OperationId = "testReference",
+                                Description = "Test operation with $ref alongside other properties",
+                                RequestBody = new OpenApiRequestBody
+                                {
+                                    Content = new Dictionary<string, OpenApiMediaType>
+                                    {
+                                        ["application/json"] = new OpenApiMediaType
+                                        {
+                                            Schema = new OpenApiSchema
+                                            {
+                                                Type = "object",
+                                                Properties = new Dictionary<string, OpenApiSchema>
+                                                {
+                                                    ["extendedRef"] = new OpenApiSchema
+                                                    {
+                                                        Reference = new OpenApiReference { Id = "BaseSchema" },
+                                                        Description = "Extended reference with additional properties",
+                                                        Properties = new Dictionary<string, OpenApiSchema>
+                                                        {
+                                                            ["additionalProp"] = new OpenApiSchema { Type = "string" }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            // Act
+            string mcpJson = _converter.ConvertToMcp(document, null, null, false);
+            var mcpContext = JObject.Parse(mcpJson);
+
+            // Assert
+            Assert.NotNull(mcpContext);
+            
+            // Verify the reference with properties was properly converted
+            var tools = mcpContext["tools"] as JArray;
+            var tool = tools[0] as JObject;
+            var parameters = tool["parameters"] as JObject;
+            var properties = parameters["properties"] as JObject;
+            var body = properties["body"] as JObject;
+            var bodyProperties = body["properties"] as JObject;
+            var extendedRef = bodyProperties["extendedRef"] as JObject;
+            
+            // Check both $ref and properties are preserved (OpenAPI 3.1.0 feature)
+            Assert.NotNull(extendedRef["$ref"]);
+            Assert.Equal("#/components/schemas/BaseSchema", extendedRef["$ref"]?.ToString());
+            Assert.NotNull(extendedRef["properties"]);
+        }
+    }
+}

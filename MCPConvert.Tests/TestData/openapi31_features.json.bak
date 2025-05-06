@@ -1,0 +1,253 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "OpenAPI 3.1.0 Feature Test",
+    "version": "1.0.0",
+    "description": "API for testing OpenAPI 3.1.0 specific features"
+  },
+  "paths": {
+    "/test-nullable": {
+      "post": {
+        "operationId": "testNullableTypes",
+        "summary": "Test nullable types (OpenAPI 3.1.0 style)",
+        "description": "Tests the conversion of 3.1.0 nullable type arrays like [\"string\", \"null\"]",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nullableString": {
+                    "type": ["string", "null"],
+                    "description": "A string that can be null (OpenAPI 3.1.0 style)"
+                  },
+                  "legacyNullable": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "A string that can be null (OpenAPI 3.0 style)"
+                  },
+                  "nonNullableString": {
+                    "type": "string",
+                    "description": "A string that cannot be null"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/test-composition": {
+      "post": {
+        "operationId": "testSchemaComposition",
+        "summary": "Test schema composition",
+        "description": "Tests the conversion of oneOf, anyOf, and allOf",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "oneOfField": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ],
+                    "description": "Field that can be either string or number"
+                  },
+                  "anyOfField": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "subField": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    ],
+                    "description": "Field that can be boolean or an object"
+                  },
+                  "allOfField": {
+                    "allOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["id"]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    ],
+                    "description": "Field that must satisfy all schema requirements"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/test-discriminator": {
+      "post": {
+        "operationId": "testDiscriminator",
+        "summary": "Test discriminator",
+        "description": "Tests the conversion of discriminators in oneOf schemas",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "petType": {
+                        "type": "string",
+                        "enum": ["dog"]
+                      },
+                      "bark": {
+                        "type": "boolean"
+                      },
+                      "breed": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["petType", "bark"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "petType": {
+                        "type": "string",
+                        "enum": ["cat"]
+                      },
+                      "meow": {
+                        "type": "boolean"
+                      },
+                      "jumpHeight": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["petType", "meow"]
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "petType"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success response"
+          }
+        }
+      }
+    },
+    "/test-reference-extensions": {
+      "post": {
+        "operationId": "testReferenceExtensions",
+        "summary": "Test $ref with additional properties",
+        "description": "Tests the conversion of $ref alongside other properties (OpenAPI 3.1.0 feature)",
+        "requestBody": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["id"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "email": {
+                        "type": ["string", "null"]
+                      },
+                      "profile": {
+                        "type": "object",
+                        "properties": {
+                          "avatar": {
+                            "type": "string",
+                            "format": "uri"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success response"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "NullableString": {
+        "type": ["string", "null"],
+        "description": "A string that can be null (OpenAPI 3.1.0 style)"
+      }
+    }
+  }
+}

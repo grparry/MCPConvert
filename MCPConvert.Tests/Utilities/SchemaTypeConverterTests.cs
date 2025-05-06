@@ -1,4 +1,6 @@
+using Newtonsoft.Json.Linq;
 using Xunit;
+using Microsoft.Extensions.Logging.Abstractions;
 using MCPConvert.Services.Utilities;
 
 namespace MCPConvert.Tests.Utilities
@@ -9,7 +11,7 @@ namespace MCPConvert.Tests.Utilities
 
         public SchemaTypeConverterTests()
         {
-            _converter = new SchemaTypeConverter();
+            _converter = new SchemaTypeConverter(NullLogger<SchemaTypeConverter>.Instance);
         }
 
         [Theory]
